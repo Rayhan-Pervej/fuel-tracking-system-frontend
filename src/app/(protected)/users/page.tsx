@@ -10,7 +10,7 @@ import Modal from '@/components/ui/Modal';
 import Badge from '@/components/ui/Badge';
 import Pagination from '@/components/ui/Pagination';
 
-interface User { _id: string; name: string; email: string; role: string; license: string; created_at: string; }
+interface User { _id: string; name: string; email: string; role: string; created_at: string; }
 
 export default function UsersPage() {
   const { isAdmin, user, logout } = useAuth();
@@ -19,8 +19,8 @@ export default function UsersPage() {
   const [emailFilter, setEmailFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'employee', license: '' });
-  const [editForm, setEditForm] = useState({ name: '', license: '', role: 'employee' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'employee' });
+  const [editForm, setEditForm] = useState({ name: '', role: 'employee' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [roleNotice, setRoleNotice] = useState('');
@@ -41,7 +41,7 @@ export default function UsersPage() {
     e.preventDefault(); setSubmitting(true); setFormError('');
     try {
       await apiFetch('/api/users/', { method: 'POST', body: JSON.stringify(form) });
-      setShowCreate(false); setForm({ name: '', email: '', password: '', role: 'employee', license: '' }); refresh();
+      setShowCreate(false); setForm({ name: '', email: '', password: '', role: 'employee' }); refresh();
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -55,7 +55,6 @@ export default function UsersPage() {
       setEditUser(null); refresh();
       if (roleChanged) {
         if (isSelf) {
-          // Own role changed — JWT is stale, must re-login
           clearAuth();
           router.replace('/login');
         } else {
@@ -67,7 +66,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Delete this user? This will also delete their vehicles and pump assignments.')) return;
+    if (!confirm('Delete this user? This will also remove their pump assignments.')) return;
     try {
       await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
       refresh();
@@ -81,14 +80,12 @@ export default function UsersPage() {
         <button onClick={() => setShowCreate(true)} className="bg-gray-900 text-white px-4 py-2 rounded text-sm hover:bg-gray-700">+ New User</button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
           className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none">
           <option value="">All roles</option>
           <option value="admin">Admin</option>
           <option value="employee">Employee</option>
-          <option value="customer">Customer</option>
         </select>
         <input type="text" placeholder="Search by email…" value={emailFilter}
           onChange={e => setEmailFilter(e.target.value)}
@@ -110,7 +107,7 @@ export default function UsersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>{['Name', 'Email', 'Role', 'License', 'Created'].map(h => (
+              <tr>{['Name', 'Email', 'Role', 'Created'].map(h => (
                 <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
               ))}<th className="px-4 py-2"></th></tr>
             </thead>
@@ -120,10 +117,9 @@ export default function UsersPage() {
                   <td className="px-4 py-2 font-medium">{u.name}</td>
                   <td className="px-4 py-2 text-gray-500">{u.email}</td>
                   <td className="px-4 py-2"><Badge value={u.role} /></td>
-                  <td className="px-4 py-2 font-mono text-xs">{u.license}</td>
                   <td className="px-4 py-2 text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-2 flex gap-3">
-                    <button onClick={() => { setEditUser(u); setEditForm({ name: u.name, license: u.license, role: u.role }); setFormError(''); setRoleNotice(''); }}
+                    <button onClick={() => { setEditUser(u); setEditForm({ name: u.name, role: u.role }); setFormError(''); setRoleNotice(''); }}
                       className="text-xs text-blue-600 hover:underline">Edit</button>
                     <button onClick={() => handleDelete(u._id)}
                       className="text-xs text-red-500 hover:underline">Delete</button>
@@ -131,7 +127,7 @@ export default function UsersPage() {
                 </tr>
               ))}
               {users.length === 0 && !loading && (
-                <tr><td colSpan={6} className="text-center text-gray-400 py-8">No users found</td></tr>
+                <tr><td colSpan={5} className="text-center text-gray-400 py-8">No users found</td></tr>
               )}
             </tbody>
           </table>
@@ -139,12 +135,11 @@ export default function UsersPage() {
       </div>
       <Pagination hasMore={hasMore} loading={loading} onLoadMore={loadMore} />
 
-      {/* Create Modal */}
       {showCreate && (
         <Modal title="Create User" onClose={() => { setShowCreate(false); setFormError(''); }}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
           <form onSubmit={handleCreate} className="space-y-3">
-            {[{l:'Name',k:'name',t:'text',min:2,max:100},{l:'Email',k:'email',t:'email'},{l:'Password',k:'password',t:'password',min:8},{l:'License',k:'license',t:'text',min:3,max:10}].map(f => (
+            {[{l:'Name',k:'name',t:'text',min:2,max:100},{l:'Email',k:'email',t:'email'},{l:'Password',k:'password',t:'password',min:8}].map(f => (
               <div key={f.k}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.l}</label>
                 <input type={f.t} required value={form[f.k as keyof typeof form]}
@@ -159,7 +154,6 @@ export default function UsersPage() {
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
                 <option value="admin">Admin</option>
                 <option value="employee">Employee</option>
-                <option value="customer">Customer</option>
               </select>
             </div>
             <button type="submit" disabled={submitting}
@@ -170,7 +164,6 @@ export default function UsersPage() {
         </Modal>
       )}
 
-      {/* Edit Modal */}
       {editUser && (
         <Modal title="Edit User" onClose={() => { setEditUser(null); setFormError(''); }}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
@@ -186,18 +179,11 @@ export default function UsersPage() {
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">License</label>
-              <input type="text" value={editForm.license} onChange={e => setEditForm(p => ({ ...p, license: e.target.value }))}
-                minLength={3} maxLength={10}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
                 <option value="admin">Admin</option>
                 <option value="employee">Employee</option>
-                <option value="customer">Customer</option>
               </select>
             </div>
             <button type="submit" disabled={submitting}

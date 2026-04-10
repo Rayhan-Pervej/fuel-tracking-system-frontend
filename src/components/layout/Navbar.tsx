@@ -7,11 +7,11 @@ import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api';
 
 const navLinks = [
-  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'employee', 'customer'] },
+  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'employee'] },
   { href: '/transactions', label: 'Transactions', roles: ['admin', 'employee'] },
-  { href: '/vehicles', label: 'Vehicles', roles: ['admin', 'employee', 'customer'] },
+  { href: '/vehicles', label: 'Vehicles', roles: ['admin'] },
   { href: '/pumps', label: 'Pumps', roles: ['admin'] },
-  { href: '/fuel-prices', label: 'Fuel Prices', roles: ['admin', 'employee', 'customer'] },
+  { href: '/fuel-prices', label: 'Fuel Prices', roles: ['admin', 'employee'] },
   { href: '/users', label: 'Users', roles: ['admin'] },
 ];
 

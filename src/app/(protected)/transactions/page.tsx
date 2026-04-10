@@ -13,16 +13,18 @@ interface Pump { _id: string; name: string; }
 interface Vehicle { _id: string; vehicle_number: string; }
 interface PumpAssignment { pump_id: string; user_id: string; role: string; }
 
-type Filters = { vehicle_number: string; pump_id: string; fuel_type: string; from: string; to: string; _ready: boolean };
+type Filters = { vehicle_number: string; pump_name: string; fuel_type: string; from: string; to: string; _ready: boolean };
 
 export default function TransactionsPage() {
   const { isAdmin, isEmployee } = useAuth();
-  const [filters, setFilters] = useState<Filters>({ vehicle_number: '', pump_id: '', fuel_type: '', from: '', to: '', _ready: false });
+  const [filters, setFilters] = useState<Filters>({ vehicle_number: '', pump_name: '', fuel_type: '', from: '', to: '', _ready: false });
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ vehicle_id: '', pump_id: '', fuel_type: 'octane', quantity: '', totalPrice: '' });
+  const [form, setForm] = useState({ vehicle_number: '', pump_id: '', fuel_type: 'octane', quantity: '', totalPrice: '' });
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [vehicleResults, setVehicleResults] = useState<Vehicle[]>([]);
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [vehicleHistory, setVehicleHistory] = useState<Transaction[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [pricePerUnit, setPricePerUnit] = useState<number | null>(null);
@@ -30,7 +32,6 @@ export default function TransactionsPage() {
   const myPumpsRef = useRef<PumpAssignment[]>([]);
   const [pumpsReady, setPumpsReady] = useState(isAdmin);
 
-  // When pumpsReady flips true, update applied so useCursorList re-fetches
   useEffect(() => {
     if (pumpsReady) {
       setFilters(p => ({ ...p, _ready: true }));
@@ -42,12 +43,9 @@ export default function TransactionsPage() {
       apiFetch<{ data: { pumps: Pump[] } }>('/api/pumps/?limit=100')
         .then(r => { setPumps(r.data.pumps); setPumpsReady(true); }).catch(() => setPumpsReady(true));
     } else {
-      // Employee: fetch assigned pumps, then resolve each pump's name
       apiFetch<{ data: { pumps: PumpAssignment[] } }>('/api/pumps/me/pumps')
         .then(async r => {
           myPumpsRef.current = r.data.pumps;
-
-          // resolve pump names
           const resolved = await Promise.all(
             r.data.pumps.map(p =>
               apiFetch<{ data: { pump: { _id: string; name: string } } }>(`/api/pumps/${p.pump_id}`)
@@ -67,24 +65,26 @@ export default function TransactionsPage() {
   const fetcher = useCallback(async (cursor: string | null, f: Filters) => {
     if (!f._ready) return { items: [], pagination: { next_cursor: null, has_more: false, limit: 15 } };
     if (isAdmin) {
-      const q = buildQuery({ cursor, limit: 15, vehicle_number: f.vehicle_number || undefined, pump_id: f.pump_id || undefined, fuel_type: f.fuel_type || undefined, from: f.from || undefined, to: f.to || undefined });
+      const q = buildQuery({ cursor, limit: 15, vehicle_number: f.vehicle_number || undefined, pump_name: f.pump_name || undefined, fuel_type: f.fuel_type || undefined, from: f.from || undefined, to: f.to || undefined });
       const res = await apiFetch<{ data: { transactions: Transaction[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/transactions/${q}`);
       return { items: res.data.transactions, pagination: res.data.pagination };
     } else {
-      const pumpId = f.pump_id || myPumpsRef.current[0]?.pump_id;
+      const pumpId = f.pump_name
+        ? pumps.find(p => p.name === f.pump_name)?._id ?? myPumpsRef.current[0]?.pump_id
+        : myPumpsRef.current[0]?.pump_id;
       if (!pumpId) return { items: [], pagination: { next_cursor: null, has_more: false, limit: 15 } };
       const q = buildQuery({ cursor, limit: 15, fuel_type: f.fuel_type || undefined, from: f.from || undefined, to: f.to || undefined });
       const res = await apiFetch<{ data: { transactions: Transaction[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/transactions/pump/${pumpId}${q}`);
       return { items: res.data.transactions, pagination: res.data.pagination };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isAdmin, pumps]);
 
   const { items: txns, hasMore, loading, error, loadMore, refresh } = useCursorList<Transaction, Filters>({
     fetcher, filters,
   });
 
-  const clearFilters = () => setFilters({ vehicle_number: '', pump_id: '', fuel_type: '', from: '', to: '', _ready: pumpsReady });
+  const clearFilters = () => setFilters({ vehicle_number: '', pump_name: '', fuel_type: '', from: '', to: '', _ready: pumpsReady });
 
   const fetchPrice = async (fuelType: string) => {
     setPricePerUnit(null);
@@ -94,8 +94,21 @@ export default function TransactionsPage() {
     } catch { setPricePerUnit(null); }
   };
 
+  const fetchVehicleHistory = async (vehicleId: string) => {
+    setHistoryLoading(true);
+    setVehicleHistory([]);
+    try {
+      const res = await apiFetch<{ data: { transactions: Transaction[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/transactions/vehicle/${vehicleId}?limit=5`);
+      setVehicleHistory(res.data.transactions);
+    } catch { setVehicleHistory([]); }
+    finally { setHistoryLoading(false); }
+  };
+
   const searchVehicles = async (q: string) => {
     setVehicleSearch(q);
+    setForm(p => ({ ...p, vehicle_number: q }));
+    setSelectedVehicleId(null);
+    setVehicleHistory([]);
     if (q.length < 2) { setVehicleResults([]); return; }
     try {
       const res = await apiFetch<{ data: { vehicles: Vehicle[] } }>(`/api/vehicles/search?q=${encodeURIComponent(q)}&limit=10`);
@@ -106,8 +119,10 @@ export default function TransactionsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError('');
     try {
-      await apiFetch('/api/transactions/', { method: 'POST', body: JSON.stringify({ vehicle_id: form.vehicle_id, pump_id: form.pump_id, fuel_type: form.fuel_type, quantity: parseFloat(form.quantity), total_price: parseFloat(form.totalPrice) }) });
-      setShowCreate(false); setForm({ vehicle_id: '', pump_id: isEmployee && pumps[0] ? pumps[0]._id : '', fuel_type: 'octane', quantity: '', totalPrice: '' }); setVehicleSearch(''); setVehicleResults([]); setSelectedVehicle(null); setPricePerUnit(null); refresh();
+      await apiFetch('/api/transactions/', { method: 'POST', body: JSON.stringify({ vehicle_number: form.vehicle_number, pump_id: form.pump_id, fuel_type: form.fuel_type, quantity: parseFloat(form.quantity), total_price: parseFloat(form.totalPrice) }) });
+      setShowCreate(false);
+      setForm({ vehicle_number: '', pump_id: isEmployee && pumps[0] ? pumps[0]._id : '', fuel_type: 'octane', quantity: '', totalPrice: '' });
+      setVehicleSearch(''); setVehicleResults([]); setPricePerUnit(null); setSelectedVehicleId(null); setVehicleHistory([]); refresh();
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -134,11 +149,17 @@ export default function TransactionsPage() {
         )}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Pump</label>
-          <select value={filters.pump_id} onChange={e => setFilters(p => ({ ...p, pump_id: e.target.value }))}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44">
-            <option value="">All pumps</option>
-            {pumps.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-          </select>
+          {isAdmin ? (
+            <input type="text" placeholder="Search pump name…" value={filters.pump_name}
+              onChange={e => setFilters(p => ({ ...p, pump_name: e.target.value }))}
+              className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44" />
+          ) : (
+            <select value={filters.pump_name} onChange={e => setFilters(p => ({ ...p, pump_name: e.target.value }))}
+              className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44">
+              <option value="">All pumps</option>
+              {pumps.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
+            </select>
+          )}
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Fuel Type</label>
@@ -160,7 +181,7 @@ export default function TransactionsPage() {
           <input type="date" value={filters.to} onChange={e => setFilters(p => ({ ...p, to: e.target.value }))}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none" />
         </div>
-        {(filters.vehicle_number || filters.pump_id || filters.fuel_type || filters.from || filters.to) && (
+        {(filters.vehicle_number || filters.pump_name || filters.fuel_type || filters.from || filters.to) && (
           <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-800 mb-1.5">Clear</button>
         )}
       </div>
@@ -196,92 +217,112 @@ export default function TransactionsPage() {
       <Pagination hasMore={hasMore} loading={loading} onLoadMore={loadMore} />
 
       {showCreate && (
-        <Modal title="New Transaction" onClose={() => { setShowCreate(false); setVehicleSearch(''); setVehicleResults([]); setSelectedVehicle(null); setPricePerUnit(null); }}>
+        <Modal title="New Transaction" wide={!!selectedVehicleId} onClose={() => { setShowCreate(false); setVehicleSearch(''); setVehicleResults([]); setPricePerUnit(null); setSelectedVehicleId(null); setVehicleHistory([]); }}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
-          <form onSubmit={handleCreate} className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle</label>
-              {form.vehicle_id ? (
-                <div className="flex items-center gap-2 border border-gray-300 rounded px-3 py-2 text-sm bg-gray-50">
-                  <span className="flex-1 font-mono">{selectedVehicle?.vehicle_number ?? form.vehicle_id}</span>
-                  <button type="button" onClick={() => { setForm(p => ({ ...p, vehicle_id: '' })); setSelectedVehicle(null); setVehicleSearch(''); setVehicleResults([]); }}
-                    className="text-gray-400 hover:text-gray-700 text-xs">✕ Change</button>
-                </div>
-              ) : (
+          <div className="flex gap-0">
+            {/* Form */}
+            <form onSubmit={handleCreate} className={`space-y-3 ${selectedVehicleId ? 'flex-1 min-w-0 pr-5' : 'w-full'}`}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Number</label>
                 <div className="relative">
-                  <input type="text" placeholder="Search by vehicle number…" value={vehicleSearch}
+                  <input type="text" required placeholder="Type vehicle number…" value={vehicleSearch}
                     onChange={e => searchVehicles(e.target.value)}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
                   {vehicleResults.length > 0 && (
                     <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded shadow mt-1 max-h-40 overflow-y-auto">
                       {vehicleResults.map(v => (
                         <li key={v._id}>
-                          <button type="button" onClick={() => { setForm(p => ({ ...p, vehicle_id: v._id })); setSelectedVehicle(v); setVehicleResults([]); setVehicleSearch(''); }}
+                          <button type="button" onClick={() => { setForm(p => ({ ...p, vehicle_number: v.vehicle_number })); setVehicleSearch(v.vehicle_number); setVehicleResults([]); setSelectedVehicleId(v._id); fetchVehicleHistory(v._id); }}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 font-mono">{v.vehicle_number}</button>
                         </li>
                       ))}
                     </ul>
                   )}
-                  {vehicleSearch.length >= 1 && vehicleResults.length === 0 && (
-                    <p className="text-xs text-gray-400 mt-1">No vehicles found</p>
-                  )}
                 </div>
-              )}
-              {/* hidden required field trick */}
-              <input type="text" required value={form.vehicle_id} onChange={() => {}} className="sr-only" tabIndex={-1} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pump</label>
-              {pumps.length === 1 ? (
-                // Single assigned pump — just show it, no dropdown needed
-                <div className="border border-gray-200 rounded px-3 py-2 text-sm bg-gray-50 text-gray-700">{pumps[0].name}</div>
-              ) : (
-                <select required value={form.pump_id} onChange={e => setForm(p => ({ ...p, pump_id: e.target.value }))}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pump</label>
+                {pumps.length === 1 ? (
+                  <div className="border border-gray-200 rounded px-3 py-2 text-sm bg-gray-50 text-gray-700">{pumps[0].name}</div>
+                ) : (
+                  <select required value={form.pump_id} onChange={e => setForm(p => ({ ...p, pump_id: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
+                    <option value="">Select pump…</option>
+                    {pumps.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fuel Type</label>
+                <select value={form.fuel_type} onChange={e => { setForm(p => ({ ...p, fuel_type: e.target.value, quantity: '', totalPrice: '' })); fetchPrice(e.target.value); }}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-                  <option value="">Select pump…</option>
-                  {pumps.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  <option value="octane">Octane</option>
+                  <option value="diesel">Diesel</option>
+                  <option value="petrol">Petrol</option>
                 </select>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fuel Type</label>
-              <select value={form.fuel_type} onChange={e => { setForm(p => ({ ...p, fuel_type: e.target.value, quantity: '', totalPrice: '' })); fetchPrice(e.target.value); }}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-                <option value="octane">Octane</option>
-                <option value="diesel">Diesel</option>
-                <option value="petrol">Petrol</option>
-              </select>
-              {pricePerUnit !== null && (
-                <p className="text-xs text-gray-500 mt-1">Rate: BDT {pricePerUnit.toLocaleString()} / liter</p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                <input type="number" required min="0.1" step="0.1" value={form.quantity}
-                  onChange={e => {
-                    const qty = e.target.value;
-                    const total = pricePerUnit && qty ? (pricePerUnit * parseFloat(qty)).toFixed(2) : '';
-                    setForm(p => ({ ...p, quantity: qty, totalPrice: total }));
-                  }}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+                {pricePerUnit !== null && (
+                  <p className="text-xs text-gray-500 mt-1">Rate: BDT {pricePerUnit.toLocaleString()} / liter</p>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
-                <input type="number" required min="0.1" step="0.01" value={form.totalPrice}
-                  onChange={e => {
-                    const total = e.target.value;
-                    const qty = pricePerUnit && total ? (parseFloat(total) / pricePerUnit).toFixed(2) : '';
-                    setForm(p => ({ ...p, totalPrice: total, quantity: qty }));
-                  }}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <input type="number" required min="0.1" step="0.1" value={form.quantity}
+                    onChange={e => {
+                      const qty = e.target.value;
+                      const total = pricePerUnit && qty ? (pricePerUnit * parseFloat(qty)).toFixed(2) : '';
+                      setForm(p => ({ ...p, quantity: qty, totalPrice: total }));
+                    }}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
+                  <input type="number" required min="0.01" step="0.01" value={form.totalPrice}
+                    onChange={e => {
+                      const total = e.target.value;
+                      const qty = pricePerUnit && total ? (parseFloat(total) / pricePerUnit).toFixed(2) : '';
+                      setForm(p => ({ ...p, totalPrice: total, quantity: qty }));
+                    }}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+                </div>
               </div>
-            </div>
-            <button type="submit" disabled={submitting}
-              className="w-full bg-gray-900 text-white py-2 rounded text-sm hover:bg-gray-700 disabled:opacity-50">
-              {submitting ? 'Recording…' : 'Record Transaction'}
-            </button>
-          </form>
+              <button type="submit" disabled={submitting}
+                className="w-full bg-gray-900 text-white py-2 rounded text-sm hover:bg-gray-700 disabled:opacity-50">
+                {submitting ? 'Recording…' : 'Record Transaction'}
+              </button>
+            </form>
+
+            {/* History panel */}
+            {selectedVehicleId && (
+              <div className="w-56 shrink-0 border-l border-gray-200 pl-5 flex flex-col">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Recent Activity</p>
+                {historyLoading ? (
+                  <p className="text-xs text-gray-400">Loading…</p>
+                ) : vehicleHistory.length === 0 ? (
+                  <p className="text-xs text-gray-400">No previous transactions</p>
+                ) : (
+                  <>
+                    <ul className="space-y-3 flex-1">
+                      {vehicleHistory.map(t => (
+                        <li key={t._id} className="text-xs border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="capitalize font-medium text-gray-700">{t.fuel_type ?? '—'}</span>
+                            <span className="text-gray-400">{new Date(t.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <div className="text-gray-600">{t.quantity} {t.unit ?? 'L'}</div>
+                          {t.pump_name && <div className="text-gray-400 truncate mt-0.5">{t.pump_name}</div>}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-400">Total fuel (last {vehicleHistory.length})</p>
+                      <p className="text-sm font-semibold text-gray-800">{vehicleHistory.reduce((s, t) => s + t.quantity, 0).toFixed(2)} L</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </Modal>
       )}
     </div>
