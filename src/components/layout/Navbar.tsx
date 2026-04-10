@@ -1,22 +1,32 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { apiFetch } from '@/lib/api';
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'employee', 'customer'] },
   { href: '/transactions', label: 'Transactions', roles: ['admin', 'employee'] },
   { href: '/vehicles', label: 'Vehicles', roles: ['admin', 'employee', 'customer'] },
-  { href: '/pumps', label: 'Pumps', roles: ['admin', 'employee', 'customer'] },
+  { href: '/pumps', label: 'Pumps', roles: ['admin'] },
   { href: '/fuel-prices', label: 'Fuel Prices', roles: ['admin', 'employee', 'customer'] },
   { href: '/users', label: 'Users', roles: ['admin'] },
 ];
 
 export default function Navbar() {
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading, isEmployee } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [myPumpId, setMyPumpId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isEmployee) return;
+    apiFetch<{ data: { pumps: { pump_id: string }[] } }>('/api/pumps/me/pumps')
+      .then(r => { if (r.data.pumps.length > 0) setMyPumpId(r.data.pumps[0].pump_id); })
+      .catch(() => {});
+  }, [isEmployee]);
 
   const handleLogout = async () => {
     await logout();
@@ -32,16 +42,21 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-1">
           <span className="font-semibold text-gray-800 mr-4 text-sm">⛽ FuelTrack</span>
-          {visibleLinks.map(l => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                pathname.startsWith(l.href)
-                  ? 'bg-gray-100 text-gray-900 font-medium'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
+          {visibleLinks.slice(0, 3).map(l => (
+            <Link key={l.href} href={l.href}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${pathname.startsWith(l.href) ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
+              {l.label}
+            </Link>
+          ))}
+          {isEmployee && myPumpId && (
+            <Link href={`/pumps/${myPumpId}`}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${pathname.startsWith('/pumps/') ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
+              My Pump
+            </Link>
+          )}
+          {visibleLinks.slice(3).map(l => (
+            <Link key={l.href} href={l.href}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${pathname.startsWith(l.href) ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
               {l.label}
             </Link>
           ))}

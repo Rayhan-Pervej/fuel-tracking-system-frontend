@@ -70,7 +70,7 @@ export default function FuelPricesPage() {
           const p = latest[ft];
           return (
             <div key={ft} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-1"><Badge value={ft} /><span className="text-xs text-gray-400">Latest</span></div>
+              <div className="flex items-center gap-2 mb-1"><Badge value={ft} /><span className="text-xs text-gray-400">Current</span></div>
               {p ? (
                 <>
                   <p className="text-2xl font-bold">{p.price_per_unit} <span className="text-sm font-normal text-gray-500">{p.currency}/{p.unit}</span></p>
