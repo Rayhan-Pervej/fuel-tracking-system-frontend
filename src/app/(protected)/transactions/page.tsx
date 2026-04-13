@@ -107,6 +107,13 @@ export default function TransactionsPage() {
     finally { setHistoryLoading(false); }
   };
 
+  const calcTotal = (qty: string) => {
+    if (pricePerUnit === null || !qty) return '';
+    const n = parseFloat(qty);
+    if (!Number.isFinite(n)) return '';
+    return (n * pricePerUnit).toFixed(2);
+  };
+
   const searchVehicles = async (q: string) => {
     setVehicleSearch(q);
     setForm(p => ({ ...p, vehicle_number: q }));
@@ -285,23 +292,18 @@ export default function TransactionsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input type="number" required min="0.1" step="0.1" value={form.quantity}
+                  <input type="number" required min="0.1" step="0.01" value={form.quantity}
                     onChange={e => {
                       const qty = e.target.value;
-                      const total = pricePerUnit && qty ? (pricePerUnit * parseFloat(qty)).toFixed(2) : '';
+                      const total = calcTotal(qty);
                       setForm(p => ({ ...p, quantity: qty, totalPrice: total }));
                     }}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
-                  <input type="number" required min="0.01" step="0.01" value={form.totalPrice}
-                    onChange={e => {
-                      const total = e.target.value;
-                      const qty = pricePerUnit && total ? (parseFloat(total) / pricePerUnit).toFixed(2) : '';
-                      setForm(p => ({ ...p, totalPrice: total, quantity: qty }));
-                    }}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+                  <input type="number" required min="0.01" step="0.01" value={form.totalPrice} readOnly
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none bg-gray-50 text-gray-600" />
                 </div>
               </div>
               <button type="submit" disabled={submitting}

@@ -7,6 +7,12 @@ export interface DashboardStats {
   total_transactions: number;
   total_fuel_dispensed: number;
   total_revenue: number;
+  fuel_type_totals?: {
+    octane?: number;
+    diesel?: number;
+    petrol?: number;
+    [key: string]: number | undefined;
+  };
 }
 
 export interface LiveTransaction {

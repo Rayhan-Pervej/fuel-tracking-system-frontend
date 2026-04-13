@@ -27,6 +27,8 @@ export default function DashboardPage() {
 
   if (!canAccessDashboard) return null;
 
+  const fuelTotals = stats?.fuel_type_totals;
+
   const filtered = transactions.filter(t => {
     if (fuelFilter && t.fuel_type !== fuelFilter) return false;
     if (pumpFilter && !t.pump_name.toLowerCase().includes(pumpFilter.toLowerCase())) return false;
@@ -44,10 +46,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <StatCard label="Total Transactions" value={stats?.total_transactions ?? '—'} />
         <StatCard label="Total Fuel Dispensed" value={stats ? `${stats.total_fuel_dispensed.toFixed(1)} L` : '—'} />
         <StatCard label="Total Revenue" value={stats ? `BDT ${stats.total_revenue.toLocaleString()}` : '—'} />
+        <StatCard tone="octane" label="Octane Dispensed" value={typeof fuelTotals?.octane === 'number' ? `${fuelTotals.octane.toFixed(1)} L` : '—'} />
+        <StatCard tone="diesel" label="Diesel Dispensed" value={typeof fuelTotals?.diesel === 'number' ? `${fuelTotals.diesel.toFixed(1)} L` : '—'} />
+        <StatCard tone="petrol" label="Petrol Dispensed" value={typeof fuelTotals?.petrol === 'number' ? `${fuelTotals.petrol.toFixed(1)} L` : '—'} />
       </div>
 
       {/* Filters */}
