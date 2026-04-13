@@ -18,8 +18,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      router.push('/dashboard');
+      const nextRoute = await login(email, password);
+      router.push(nextRoute);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

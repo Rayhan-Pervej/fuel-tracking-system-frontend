@@ -12,6 +12,7 @@ import Pagination from '@/components/ui/Pagination';
 interface Pump { _id: string; name: string; location: string; license: string; }
 interface PumpEmployee { _id: string; user_id: string; role: string; added_by: string; created_at: string; }
 interface UserInfo { name: string; email: string; }
+type AddMode = 'existing' | 'new';
 
 export default function PumpDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,14 +25,14 @@ export default function PumpDetailPage() {
   const [pump, setPump] = useState<Pump | null>(null);
   const [userMap, setUserMap] = useState<Record<string, UserInfo>>({});
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ email: '', role: 'employee' });
+  const [addForm, setAddForm] = useState({ mode: 'existing' as AddMode, name: '', email: '', password: '', role: 'employee' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
     apiFetch<{ data: { pump: Pump } }>(`/api/pumps/${id}`)
       .then(r => setPump(r.data.pump))
-      .catch(() => {});
+      .catch(() => { });
   }, [id]);
 
   const fetcher = useCallback(async (cursor: string | null) => {
@@ -59,14 +60,20 @@ export default function PumpDetailPage() {
         return next;
       });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employees]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError('');
     try {
-      await apiFetch(`/api/pumps/${id}/employees`, { method: 'POST', body: JSON.stringify(addForm) });
-      setShowAdd(false); setAddForm({ email: '', role: 'employee' }); refresh();
+      const payload = addForm.mode === 'existing'
+        ? { mode: 'existing', email: addForm.email, role: addForm.role }
+        : { mode: 'new', name: addForm.name, email: addForm.email, password: addForm.password, role: addForm.role };
+
+      await apiFetch(`/api/pumps/${id}/employees`, { method: 'POST', body: JSON.stringify(payload) });
+      setShowAdd(false);
+      setAddForm({ mode: 'existing', name: '', email: '', password: '', role: 'employee' });
+      refresh();
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -100,7 +107,11 @@ export default function PumpDetailPage() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-medium">Employees</h2>
         {(isAdmin || isPumpAdmin(employees)) && (
-          <button onClick={() => { setShowAdd(true); setFormError(''); }}
+          <button onClick={() => {
+            setShowAdd(true);
+            setFormError('');
+            setAddForm({ mode: 'existing', name: '', email: '', password: '', role: 'employee' });
+          }}
             className="bg-gray-900 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700">+ Add Employee</button>
         )}
       </div>
@@ -158,22 +169,58 @@ export default function PumpDetailPage() {
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
           <form onSubmit={handleAdd} className="space-y-3">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+              <div className="grid grid-cols-2 gap-2 rounded-md bg-gray-100 p-1">
+                <button type="button"
+                  onClick={() => setAddForm(p => ({ ...p, mode: 'existing', name: '', email: '', password: '', role: 'employee' }))}
+                  className={`rounded px-3 py-2 text-sm transition-colors ${addForm.mode === 'existing' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
+                  Existing User
+                </button>
+                <button type="button"
+                  onClick={() => setAddForm(p => ({ ...p, mode: 'new', name: '', email: '', password: '', role: 'employee' }))}
+                  className={`rounded px-3 py-2 text-sm transition-colors ${addForm.mode === 'new' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
+                  New User
+                </button>
+              </div>
+            </div>
+            {addForm.mode === 'new' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input type="text" required value={addForm.name}
+                  onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+              </div>
+            )}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Employee Email</label>
               <input type="email" required value={addForm.email}
                 onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
             </div>
+            {addForm.mode === 'new' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input type="password" required minLength={8} value={addForm.password}
+                  onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
                 <option value="employee">employee</option>
-                {/* pump_admin can only assign pump_admin if none exists yet */}
-                {(isAdmin || !hasPumpAdmin(employees)) && (
+                {/* in new mode, only global admin can create brand-new pump_admin */}
+                {(isAdmin || addForm.mode === 'existing') && (isAdmin || !hasPumpAdmin(employees)) && (
                   <option value="pump_admin">pump_admin</option>
                 )}
               </select>
             </div>
+            {addForm.mode === 'new' && !isAdmin && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                In new mode, only admins can create a new user directly as pump admin.
+              </p>
+            )}
             <button type="submit" disabled={submitting}
               className="w-full bg-gray-900 text-white py-2 rounded text-sm hover:bg-gray-700 disabled:opacity-50">
               {submitting ? 'Adding…' : 'Add'}

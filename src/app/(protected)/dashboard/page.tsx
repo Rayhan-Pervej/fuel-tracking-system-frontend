@@ -1,17 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 import StatCard from '@/components/ui/StatCard';
 import Badge from '@/components/ui/Badge';
 
 export default function DashboardPage() {
-  const { accessToken } = useAuth();
-  const { stats, transactions, connected } = useSocket(accessToken);
+  const { accessToken, user, isLoading, canAccessDashboard } = useAuth();
+  const router = useRouter();
+  const { stats, transactions, connected } = useSocket(canAccessDashboard ? accessToken : null);
   const [fuelFilter, setFuelFilter] = useState('');
   const [pumpFilter, setPumpFilter] = useState('');
   const [vehicleFilter, setVehicleFilter] = useState('');
+
+  useEffect(() => {
+    if (!isLoading && user && !canAccessDashboard) {
+      router.replace('/transactions');
+    }
+  }, [isLoading, user, canAccessDashboard, router]);
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen text-gray-400 text-sm">Loading…</div>;
+  }
+
+  if (!canAccessDashboard) return null;
 
   const filtered = transactions.filter(t => {
     if (fuelFilter && t.fuel_type !== fuelFilter) return false;

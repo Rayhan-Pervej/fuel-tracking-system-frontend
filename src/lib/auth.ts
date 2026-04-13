@@ -6,7 +6,8 @@ export interface StoredUser {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'employee' | 'customer';
+  role: 'admin' | 'employee';
+  pump_role?: 'employee' | 'pump_admin' | null;
 }
 
 export function getAccessToken(): string | null {

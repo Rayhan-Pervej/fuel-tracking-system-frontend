@@ -1,7 +1,6 @@
 const colors: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
   employee: 'bg-blue-100 text-blue-700',
-  customer: 'bg-gray-100 text-gray-700',
   pump_admin: 'bg-yellow-100 text-yellow-700',
   octane: 'bg-green-100 text-green-700',
   diesel: 'bg-orange-100 text-orange-700',

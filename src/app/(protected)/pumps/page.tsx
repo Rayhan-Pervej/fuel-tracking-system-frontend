@@ -12,6 +12,7 @@ interface Pump { _id: string; name: string; location: string; license: string; c
 
 export default function PumpsPage() {
   const { isAdmin, isEmployee } = useAuth();
+  const [nameFilter, setNameFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [licenseFilter, setLicenseFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -21,14 +22,20 @@ export default function PumpsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const fetcher = useCallback(async (cursor: string | null, filters: { location: string; license: string }) => {
-    const q = buildQuery({ cursor, limit: 15, location: filters.location || undefined, license: filters.license || undefined });
+  const fetcher = useCallback(async (cursor: string | null, filters: { name: string; location: string; license: string }) => {
+    const q = buildQuery({
+      cursor,
+      limit: 15,
+      name: filters.name || undefined,
+      location: filters.location || undefined,
+      license: filters.license || undefined,
+    });
     const res = await apiFetch<{ data: { pumps: Pump[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/pumps/${q}`);
     return { items: res.data.pumps, pagination: res.data.pagination };
   }, []);
 
-  const { items: pumps, hasMore, loading, error, loadMore, refresh } = useCursorList<Pump, { location: string; license: string }>({
-    fetcher, filters: { location: locationFilter, license: licenseFilter },
+  const { items: pumps, hasMore, loading, error, loadMore, refresh } = useCursorList<Pump, { name: string; location: string; license: string }>({
+    fetcher, filters: { name: nameFilter, location: locationFilter, license: licenseFilter },
   });
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -68,12 +75,14 @@ export default function PumpsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
+        <input placeholder="Filter by name…" value={nameFilter} onChange={e => setNameFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44" />
         <input placeholder="Filter by location…" value={locationFilter} onChange={e => setLocationFilter(e.target.value)}
           className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44" />
         <input placeholder="Filter by license…" value={licenseFilter} onChange={e => setLicenseFilter(e.target.value)}
           className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-44" />
-        {(locationFilter || licenseFilter) && (
-          <button onClick={() => { setLocationFilter(''); setLicenseFilter(''); }} className="text-sm text-gray-500 hover:text-gray-800">Clear</button>
+        {(nameFilter || locationFilter || licenseFilter) && (
+          <button onClick={() => { setNameFilter(''); setLocationFilter(''); setLicenseFilter(''); }} className="text-sm text-gray-500 hover:text-gray-800">Clear</button>
         )}
       </div>
 
@@ -120,7 +129,7 @@ export default function PumpsPage() {
         <Modal title="Create Pump" onClose={() => setShowCreate(false)}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
           <form onSubmit={handleCreate} className="space-y-3">
-            {[{l:'Name',k:'name'},{l:'Location',k:'location'},{l:'License',k:'license'}].map(f => (
+            {[{ l: 'Name', k: 'name' }, { l: 'Location', k: 'location' }, { l: 'License', k: 'license' }].map(f => (
               <div key={f.k}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.l}</label>
                 <input type="text" required value={form[f.k as keyof typeof form]}
@@ -140,7 +149,7 @@ export default function PumpsPage() {
         <Modal title="Edit Pump" onClose={() => setEditPump(null)}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
           <form onSubmit={handleEdit} className="space-y-3">
-            {[{l:'Name',k:'name'},{l:'Location',k:'location'},{l:'License',k:'license'}].map(f => (
+            {[{ l: 'Name', k: 'name' }, { l: 'Location', k: 'location' }, { l: 'License', k: 'license' }].map(f => (
               <div key={f.k}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.l}</label>
                 <input type="text" value={editForm[f.k as keyof typeof editForm]}

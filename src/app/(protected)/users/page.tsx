@@ -15,6 +15,7 @@ interface User { _id: string; name: string; email: string; role: string; created
 export default function UsersPage() {
   const { isAdmin, user, logout } = useAuth();
   const router = useRouter();
+  const [nameFilter, setNameFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [emailFilter, setEmailFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -25,14 +26,20 @@ export default function UsersPage() {
   const [formError, setFormError] = useState('');
   const [roleNotice, setRoleNotice] = useState('');
 
-  const fetcher = useCallback(async (cursor: string | null, filters: { role: string; email: string }) => {
-    const q = buildQuery({ cursor, limit: 15, role: filters.role || undefined, email: filters.email || undefined });
+  const fetcher = useCallback(async (cursor: string | null, filters: { name: string; role: string; email: string }) => {
+    const q = buildQuery({
+      cursor,
+      limit: 15,
+      name: filters.name || undefined,
+      role: filters.role || undefined,
+      email: filters.email || undefined,
+    });
     const res = await apiFetch<{ data: { users: User[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/users/${q}`);
     return { items: res.data.users, pagination: res.data.pagination };
   }, []);
 
-  const { items: users, hasMore, loading, error, loadMore, refresh } = useCursorList<User, { role: string; email: string }>({
-    fetcher, filters: { role: roleFilter, email: emailFilter },
+  const { items: users, hasMore, loading, error, loadMore, refresh } = useCursorList<User, { name: string; role: string; email: string }>({
+    fetcher, filters: { name: nameFilter, role: roleFilter, email: emailFilter },
   });
 
   if (!isAdmin) return <p className="text-gray-500 text-sm">Access denied.</p>;
@@ -87,11 +94,14 @@ export default function UsersPage() {
           <option value="admin">Admin</option>
           <option value="employee">Employee</option>
         </select>
+        <input type="text" placeholder="Search by name…" value={nameFilter}
+          onChange={e => setNameFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-52" />
         <input type="text" placeholder="Search by email…" value={emailFilter}
           onChange={e => setEmailFilter(e.target.value)}
           className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none w-52" />
-        {(roleFilter || emailFilter) && (
-          <button onClick={() => { setRoleFilter(''); setEmailFilter(''); }} className="text-sm text-gray-500 hover:text-gray-800">Clear</button>
+        {(nameFilter || roleFilter || emailFilter) && (
+          <button onClick={() => { setNameFilter(''); setRoleFilter(''); setEmailFilter(''); }} className="text-sm text-gray-500 hover:text-gray-800">Clear</button>
         )}
       </div>
 
@@ -139,7 +149,7 @@ export default function UsersPage() {
         <Modal title="Create User" onClose={() => { setShowCreate(false); setFormError(''); }}>
           {formError && <p className="text-red-600 text-sm mb-3">{formError}</p>}
           <form onSubmit={handleCreate} className="space-y-3">
-            {[{l:'Name',k:'name',t:'text',min:2,max:100},{l:'Email',k:'email',t:'email'},{l:'Password',k:'password',t:'password',min:8}].map(f => (
+            {[{ l: 'Name', k: 'name', t: 'text', min: 2, max: 100 }, { l: 'Email', k: 'email', t: 'email' }, { l: 'Password', k: 'password', t: 'password', min: 8 }].map(f => (
               <div key={f.k}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.l}</label>
                 <input type={f.t} required value={form[f.k as keyof typeof form]}

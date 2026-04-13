@@ -30,6 +30,7 @@ export default function TransactionsPage() {
   const [pricePerUnit, setPricePerUnit] = useState<number | null>(null);
   const [pumps, setPumps] = useState<Pump[]>([]);
   const myPumpsRef = useRef<PumpAssignment[]>([]);
+  const vehicleSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pumpsReady, setPumpsReady] = useState(isAdmin);
 
   useEffect(() => {
@@ -43,19 +44,21 @@ export default function TransactionsPage() {
       apiFetch<{ data: { pumps: Pump[] } }>('/api/pumps/?limit=100')
         .then(r => { setPumps(r.data.pumps); setPumpsReady(true); }).catch(() => setPumpsReady(true));
     } else {
-      apiFetch<{ data: { pumps: PumpAssignment[] } }>('/api/pumps/me/pumps')
+      apiFetch<{ data: { pump?: PumpAssignment | null; assignment?: PumpAssignment | null; pumps?: PumpAssignment[] } }>('/api/pumps/me/pump')
         .then(async r => {
-          myPumpsRef.current = r.data.pumps;
+          const assignment = r.data.pump ?? r.data.assignment ?? r.data.pumps?.[0] ?? null;
+          const assignments = assignment ? [assignment] : [];
+          myPumpsRef.current = assignments;
           const resolved = await Promise.all(
-            r.data.pumps.map(p =>
+            assignments.map(p =>
               apiFetch<{ data: { pump: { _id: string; name: string } } }>(`/api/pumps/${p.pump_id}`)
                 .then(res => ({ _id: p.pump_id, name: res.data.pump.name }))
                 .catch(() => ({ _id: p.pump_id, name: p.pump_id }))
             )
           );
           setPumps(resolved);
-          if (r.data.pumps.length > 0) {
-            setForm(prev => ({ ...prev, pump_id: r.data.pumps[0].pump_id }));
+          if (assignments.length > 0) {
+            setForm(prev => ({ ...prev, pump_id: assignments[0].pump_id }));
           }
           setPumpsReady(true);
         }).catch(() => setPumpsReady(true));
@@ -77,7 +80,7 @@ export default function TransactionsPage() {
       const res = await apiFetch<{ data: { transactions: Transaction[]; pagination: { next_cursor: string | null; has_more: boolean; limit: number } } }>(`/api/transactions/pump/${pumpId}${q}`);
       return { items: res.data.transactions, pagination: res.data.pagination };
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, pumps]);
 
   const { items: txns, hasMore, loading, error, loadMore, refresh } = useCursorList<Transaction, Filters>({
@@ -109,12 +112,27 @@ export default function TransactionsPage() {
     setForm(p => ({ ...p, vehicle_number: q }));
     setSelectedVehicleId(null);
     setVehicleHistory([]);
+    if (vehicleSearchDebounceRef.current) {
+      clearTimeout(vehicleSearchDebounceRef.current);
+      vehicleSearchDebounceRef.current = null;
+    }
     if (q.length < 2) { setVehicleResults([]); return; }
-    try {
-      const res = await apiFetch<{ data: { vehicles: Vehicle[] } }>(`/api/vehicles/search?q=${encodeURIComponent(q)}&limit=10`);
-      setVehicleResults(res.data.vehicles);
-    } catch { setVehicleResults([]); }
+
+    vehicleSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await apiFetch<{ data: { vehicles: Vehicle[] } }>(`/api/vehicles/search?q=${encodeURIComponent(q)}&limit=10`);
+        setVehicleResults(res.data.vehicles);
+      } catch {
+        setVehicleResults([]);
+      }
+    }, 400);
   };
+
+  useEffect(() => () => {
+    if (vehicleSearchDebounceRef.current) {
+      clearTimeout(vehicleSearchDebounceRef.current);
+    }
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError('');
