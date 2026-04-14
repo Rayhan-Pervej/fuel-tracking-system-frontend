@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { useCursorList } from '@/hooks/useCursorList';
 import Modal from '@/components/ui/Modal';
@@ -17,9 +18,13 @@ type Filters = { vehicle_number: string; pump_name: string; fuel_type: string; f
 
 export default function TransactionsPage() {
   const { isAdmin, isEmployee } = useAuth();
+  const toast = useToast();
   const [filters, setFilters] = useState<Filters>({ vehicle_number: '', pump_name: '', fuel_type: '', from: '', to: '', _ready: false });
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ vehicle_number: '', pump_id: '', fuel_type: 'octane', quantity: '', totalPrice: '' });
+  const [inputMode, setInputMode] = useState<'quantity' | 'price'>('quantity');
+  const [exactQuantity, setExactQuantity] = useState<number | null>(null);
+  const [exactTotalPrice, setExactTotalPrice] = useState<number | null>(null);
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [vehicleResults, setVehicleResults] = useState<Vehicle[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -111,7 +116,18 @@ export default function TransactionsPage() {
     if (pricePerUnit === null || !qty) return '';
     const n = parseFloat(qty);
     if (!Number.isFinite(n)) return '';
-    return (n * pricePerUnit).toFixed(2);
+    const exact = n * pricePerUnit;
+    setExactTotalPrice(exact);
+    return exact.toFixed(2);
+  };
+
+  const calcQty = (price: string) => {
+    if (pricePerUnit === null || !price) return '';
+    const n = parseFloat(price);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const exact = n / pricePerUnit;
+    setExactQuantity(exact);
+    return exact.toFixed(2);
   };
 
   const searchVehicles = async (q: string) => {
@@ -144,10 +160,20 @@ export default function TransactionsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError('');
     try {
-      await apiFetch('/api/transactions/', { method: 'POST', body: JSON.stringify({ vehicle_number: form.vehicle_number, pump_id: form.pump_id, fuel_type: form.fuel_type, quantity: parseFloat(form.quantity), total_price: parseFloat(form.totalPrice) }) });
-      setShowCreate(false);
-      setForm({ vehicle_number: '', pump_id: isEmployee && pumps[0] ? pumps[0]._id : '', fuel_type: 'octane', quantity: '', totalPrice: '' });
-      setVehicleSearch(''); setVehicleResults([]); setPricePerUnit(null); setSelectedVehicleId(null); setVehicleHistory([]); refresh();
+      const payload = {
+        vehicle_number: form.vehicle_number,
+        pump_id: form.pump_id,
+        fuel_type: form.fuel_type,
+        ...(inputMode === 'quantity'
+          ? { quantity: exactQuantity ?? parseFloat(form.quantity) }
+          : { total_price: exactTotalPrice ?? parseFloat(form.totalPrice) }),
+      };
+      await apiFetch('/api/transactions/', { method: 'POST', body: JSON.stringify(payload) });
+      setForm(p => ({ ...p, vehicle_number: '', quantity: '', totalPrice: '' }));
+      setInputMode('quantity');
+      setExactQuantity(null); setExactTotalPrice(null);
+      setVehicleSearch(''); setVehicleResults([]); setSelectedVehicleId(null); setVehicleHistory([]); refresh();
+      toast('Transaction recorded');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -227,8 +253,8 @@ export default function TransactionsPage() {
                   <td className="px-4 py-2 font-mono text-xs">{t.vehicle_number ?? t.vehicle_id}</td>
                   <td className="px-4 py-2">{t.pump_name ?? t.pump_id}</td>
                   <td className="px-4 py-2">{t.fuel_type ? <Badge value={t.fuel_type} /> : '—'}</td>
-                  <td className="px-4 py-2">{t.quantity} {t.unit ?? ''}</td>
-                  <td className="px-4 py-2">{t.currency ?? ''} {t.total_price.toLocaleString()}</td>
+                  <td className="px-4 py-2">{Number(t.quantity).toFixed(2)} {t.unit ?? ''}</td>
+                  <td className="px-4 py-2">{t.currency ?? ''} {Number(t.total_price).toFixed(2)}</td>
                   <td className="px-4 py-2 text-gray-400">{new Date(t.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
@@ -279,7 +305,7 @@ export default function TransactionsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fuel Type</label>
-                <select value={form.fuel_type} onChange={e => { setForm(p => ({ ...p, fuel_type: e.target.value, quantity: '', totalPrice: '' })); fetchPrice(e.target.value); }}
+                <select value={form.fuel_type} onChange={e => { setForm(p => ({ ...p, fuel_type: e.target.value, quantity: '', totalPrice: '' })); setExactQuantity(null); setExactTotalPrice(null); fetchPrice(e.target.value); }}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
                   <option value="octane">Octane</option>
                   <option value="diesel">Diesel</option>
@@ -291,19 +317,28 @@ export default function TransactionsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input type="number" required min="0.1" step="0.01" value={form.quantity}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity (L)</label>
+                  <input type="number" min="0.1" step="0.01" value={form.quantity}
                     onChange={e => {
                       const qty = e.target.value;
-                      const total = calcTotal(qty);
-                      setForm(p => ({ ...p, quantity: qty, totalPrice: total }));
+                      setInputMode('quantity');
+                      setExactQuantity(parseFloat(qty) || null);
+                      setForm(p => ({ ...p, quantity: qty, totalPrice: calcTotal(qty) }));
                     }}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none" />
+                    className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${inputMode === 'quantity' ? 'border-gray-800' : 'border-gray-300 bg-gray-50 text-gray-500'}`}
+                    placeholder="e.g. 5" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
-                  <input type="number" required min="0.01" step="0.01" value={form.totalPrice} readOnly
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none bg-gray-50 text-gray-600" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Price (BDT)</label>
+                  <input type="number" min="0.01" step="0.01" value={form.totalPrice}
+                    onChange={e => {
+                      const price = e.target.value;
+                      setInputMode('price');
+                      setExactTotalPrice(parseFloat(price) || null);
+                      setForm(p => ({ ...p, totalPrice: price, quantity: calcQty(price) }));
+                    }}
+                    className={`w-full border rounded px-3 py-2 text-sm focus:outline-none ${inputMode === 'price' ? 'border-gray-800' : 'border-gray-300 bg-gray-50 text-gray-500'}`}
+                    placeholder="e.g. 400" />
                 </div>
               </div>
               <button type="submit" disabled={submitting}
@@ -329,7 +364,7 @@ export default function TransactionsPage() {
                             <span className="capitalize font-medium text-gray-700">{t.fuel_type ?? '—'}</span>
                             <span className="text-gray-400">{new Date(t.created_at).toLocaleDateString()}</span>
                           </div>
-                          <div className="text-gray-600">{t.quantity} {t.unit ?? 'L'}</div>
+                          <div className="text-gray-600">{Number(t.quantity).toFixed(2)} {t.unit ?? 'L'}</div>
                           {t.pump_name && <div className="text-gray-400 truncate mt-0.5">{t.pump_name}</div>}
                         </li>
                       ))}

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { useCursorList } from '@/hooks/useCursorList';
 import Modal from '@/components/ui/Modal';
@@ -12,6 +13,7 @@ interface Pump { _id: string; name: string; location: string; license: string; c
 
 export default function PumpsPage() {
   const { isAdmin, isEmployee } = useAuth();
+  const toast = useToast();
   const [nameFilter, setNameFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [licenseFilter, setLicenseFilter] = useState('');
@@ -43,6 +45,7 @@ export default function PumpsPage() {
     try {
       await apiFetch('/api/pumps/', { method: 'POST', body: JSON.stringify(form) });
       setShowCreate(false); setForm({ name: '', location: '', license: '' }); refresh();
+      toast('Pump created');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -52,6 +55,7 @@ export default function PumpsPage() {
     try {
       await apiFetch(`/api/pumps/${editPump!._id}`, { method: 'PATCH', body: JSON.stringify(editForm) });
       setEditPump(null); refresh();
+      toast('Pump updated');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -60,8 +64,8 @@ export default function PumpsPage() {
     if (!confirm('Delete this pump? This will also remove all employee assignments.')) return;
     try {
       await apiFetch(`/api/pumps/${pumpId}`, { method: 'DELETE' });
-      refresh();
-    } catch (err) { alert(err instanceof Error ? err.message : 'Failed'); }
+      refresh(); toast('Pump deleted');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Failed', 'error'); }
   };
 
   return (

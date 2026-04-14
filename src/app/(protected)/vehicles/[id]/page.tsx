@@ -54,8 +54,8 @@ export default function VehicleDetailPage() {
                 <tr key={t._id} className="hover:bg-gray-50">
                   <td className="px-4 py-2">{t.pump_name ?? '—'}</td>
                   <td className="px-4 py-2">{t.fuel_type ? <Badge value={t.fuel_type} /> : '—'}</td>
-                  <td className="px-4 py-2">{t.quantity}</td>
-                  <td className="px-4 py-2">{t.total_price.toLocaleString()}</td>
+                  <td className="px-4 py-2">{Number(t.quantity).toFixed(2)}</td>
+                  <td className="px-4 py-2">{Number(t.total_price).toFixed(2)}</td>
                   <td className="px-4 py-2 text-gray-400">{new Date(t.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}

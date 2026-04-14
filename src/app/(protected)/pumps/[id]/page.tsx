@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { useCursorList } from '@/hooks/useCursorList';
 import Modal from '@/components/ui/Modal';
@@ -17,6 +18,7 @@ type AddMode = 'existing' | 'new';
 export default function PumpDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { isAdmin, isEmployee, user } = useAuth();
+  const toast = useToast();
   // pump_admin of THIS pump (pump-scoped role check is server-enforced; track locally for UI hints)
   const isPumpAdmin = (employees: PumpEmployee[]) =>
     !isAdmin && employees.some(e => e.user_id === user?.id && e.role === 'pump_admin');
@@ -73,7 +75,7 @@ export default function PumpDetailPage() {
       await apiFetch(`/api/pumps/${id}/employees`, { method: 'POST', body: JSON.stringify(payload) });
       setShowAdd(false);
       setAddForm({ mode: 'existing', name: '', email: '', password: '', role: 'employee' });
-      refresh();
+      refresh(); toast('Employee added');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -82,15 +84,15 @@ export default function PumpDetailPage() {
     if (!confirm('Remove this employee?')) return;
     try {
       await apiFetch(`/api/pumps/${id}/employees/${userId}`, { method: 'DELETE' });
-      refresh();
-    } catch (err) { alert(err instanceof Error ? err.message : 'Failed'); }
+      refresh(); toast('Employee removed');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Failed', 'error'); }
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       await apiFetch(`/api/pumps/${id}/employees/${userId}`, { method: 'PATCH', body: JSON.stringify({ role: newRole }) });
-      refresh();
-    } catch (err) { alert(err instanceof Error ? err.message : 'Failed'); }
+      refresh(); toast('Role updated');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Failed', 'error'); }
   };
 
   if (!isAdmin && !isEmployee) return <p className="text-gray-500 text-sm">Access denied.</p>;

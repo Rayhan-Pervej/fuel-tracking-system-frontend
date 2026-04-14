@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { useCursorList } from '@/hooks/useCursorList';
 import Modal from '@/components/ui/Modal';
@@ -13,6 +14,7 @@ interface LatestPrices { octane: FuelPrice | null; diesel: FuelPrice | null; pet
 
 export default function FuelPricesPage() {
   const { isAdmin } = useAuth();
+  const toast = useToast();
   const [fuelFilter, setFuelFilter] = useState('');
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
@@ -45,7 +47,7 @@ export default function FuelPricesPage() {
     try {
       await apiFetch('/api/fuel-prices/', { method: 'POST', body: JSON.stringify({ ...form, price_per_unit: parseFloat(form.price_per_unit) }) });
       setShowCreate(false); setForm({ fuel_type: 'octane', price_per_unit: '', unit: 'liter', currency: 'BDT', effective_from: '' });
-      refresh();
+      refresh(); toast('Price added');
       // refresh latest
       apiFetch<{ data: { fuel_price: FuelPrice } }>(`/api/fuel-prices/latest/${form.fuel_type}`)
         .then(r => setLatest(prev => ({ ...prev, [form.fuel_type]: r.data.fuel_price })))
@@ -73,7 +75,7 @@ export default function FuelPricesPage() {
               <div className="flex items-center gap-2 mb-1"><Badge value={ft} /><span className="text-xs text-gray-400">Current</span></div>
               {p ? (
                 <>
-                  <p className="text-2xl font-bold">{p.price_per_unit} <span className="text-sm font-normal text-gray-500">{p.currency}/{p.unit}</span></p>
+                  <p className="text-2xl font-bold">{Number(p.price_per_unit).toFixed(2)} <span className="text-sm font-normal text-gray-500">{p.currency}/{p.unit}</span></p>
                   <p className="text-xs text-gray-400 mt-0.5">From {p.effective_from}</p>
                 </>
               ) : <p className="text-gray-400 text-sm mt-1">No price set</p>}
@@ -120,7 +122,7 @@ export default function FuelPricesPage() {
               {prices.map(p => (
                 <tr key={p._id} className="hover:bg-gray-50">
                   <td className="px-4 py-2"><Badge value={p.fuel_type} /></td>
-                  <td className="px-4 py-2 font-medium">{p.price_per_unit}</td>
+                  <td className="px-4 py-2 font-medium">{Number(p.price_per_unit).toFixed(2)}</td>
                   <td className="px-4 py-2 text-gray-500">{p.unit}</td>
                   <td className="px-4 py-2 text-gray-500">{p.currency}</td>
                   <td className="px-4 py-2">{p.effective_from}</td>

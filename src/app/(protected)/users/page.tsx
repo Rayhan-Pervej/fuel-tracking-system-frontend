@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { clearAuth } from '@/lib/auth';
 import { useCursorList } from '@/hooks/useCursorList';
@@ -13,7 +14,8 @@ import Pagination from '@/components/ui/Pagination';
 interface User { _id: string; name: string; email: string; role: string; created_at: string; }
 
 export default function UsersPage() {
-  const { isAdmin, user, logout } = useAuth();
+  const { isAdmin, user } = useAuth();
+  const toast = useToast();
   const router = useRouter();
   const [nameFilter, setNameFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -49,6 +51,7 @@ export default function UsersPage() {
     try {
       await apiFetch('/api/users/', { method: 'POST', body: JSON.stringify(form) });
       setShowCreate(false); setForm({ name: '', email: '', password: '', role: 'employee' }); refresh();
+      toast('User created');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -60,6 +63,7 @@ export default function UsersPage() {
     try {
       await apiFetch(`/api/users/${editUser!._id}`, { method: 'PATCH', body: JSON.stringify(editForm) });
       setEditUser(null); refresh();
+      toast('Changes saved');
       if (roleChanged) {
         if (isSelf) {
           clearAuth();
@@ -76,8 +80,8 @@ export default function UsersPage() {
     if (!confirm('Delete this user? This will also remove their pump assignments.')) return;
     try {
       await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
-      refresh();
-    } catch (err) { alert(err instanceof Error ? err.message : 'Failed'); }
+      refresh(); toast('User deleted');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Failed', 'error'); }
   };
 
   return (

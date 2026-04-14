@@ -97,8 +97,8 @@ export default function DashboardPage() {
                     <td className="px-4 py-2 font-mono text-xs">{t.vehicle_number}</td>
                     <td className="px-4 py-2">{t.pump_name}</td>
                     <td className="px-4 py-2"><Badge value={t.fuel_type} /></td>
-                    <td className="px-4 py-2">{t.quantity} {t.unit}</td>
-                    <td className="px-4 py-2">{t.currency} {t.total_price.toLocaleString()}</td>
+                    <td className="px-4 py-2">{Number(t.quantity).toFixed(2)} {t.unit}</td>
+                    <td className="px-4 py-2">{t.currency} {Number(t.total_price).toFixed(2)}</td>
                     <td className="px-4 py-2 text-gray-400">{new Date(t.created_at).toLocaleTimeString()}</td>
                   </tr>
                 ))}

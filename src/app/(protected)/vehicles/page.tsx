@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { apiFetch, buildQuery } from '@/lib/api';
 import { useCursorList } from '@/hooks/useCursorList';
 import Modal from '@/components/ui/Modal';
@@ -11,6 +12,7 @@ interface Vehicle { _id: string; vehicle_number: string; created_at: string; }
 
 export default function VehiclesPage() {
   const { isAdmin } = useAuth();
+  const toast = useToast();
   const [searchFilter, setSearchFilter] = useState('');
   const [editVehicle, setEditVehicle] = useState<Vehicle | null>(null);
   const [editForm, setEditForm] = useState({ vehicle_number: '' });
@@ -32,6 +34,7 @@ export default function VehiclesPage() {
     try {
       await apiFetch(`/api/vehicles/${editVehicle!._id}`, { method: 'PATCH', body: JSON.stringify(editForm) });
       setEditVehicle(null); refresh();
+      toast('Vehicle updated');
     } catch (err) { setFormError(err instanceof Error ? err.message : 'Failed'); }
     finally { setSubmitting(false); }
   };
@@ -40,8 +43,8 @@ export default function VehiclesPage() {
     if (!confirm('Delete this vehicle?')) return;
     try {
       await apiFetch(`/api/vehicles/${vehicleId}`, { method: 'DELETE' });
-      refresh();
-    } catch (err) { alert(err instanceof Error ? err.message : 'Failed'); }
+      refresh(); toast('Vehicle deleted');
+    } catch (err) { toast(err instanceof Error ? err.message : 'Failed', 'error'); }
   };
 
   if (!isAdmin) return <p className="text-gray-500 text-sm">Access denied.</p>;
